@@ -85,12 +85,3 @@ else:
         st.download_button("📥 Download CSV", csv, "attendance.csv", "text/csv")
     else:
         st.info("No attendance records yet")
-```
-
-4. Update requirements.txt to just:
-```
-streamlit
-pandas
-Pillow
-opencv-python-headless
-numpy
