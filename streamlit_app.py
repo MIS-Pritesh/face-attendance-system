@@ -9,41 +9,41 @@ from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------
-# INITIAL SETUP
+# STREAMLIT PAGE CONFIG
 # ---------------------------------------------------
-
 st.set_page_config(page_title="Face Attendance System", page_icon="📸", layout="wide")
 
-# Create data folders
+# ---------------------------------------------------
+# PATH SETUP
+# ---------------------------------------------------
 Path("data").mkdir(exist_ok=True)
 Path("data/employee_images").mkdir(exist_ok=True)
 
 EMPLOYEE_FILE = "data/employees.csv"
 ATTENDANCE_FILE = "data/attendance.csv"
 
-# Create CSV files if not exist
-if not os.path.exists(EMPLOYEE_FILE):
-    pd.DataFrame(columns=["id", "name", "image"]).to_csv(EMPLOYEE_FILE, index=False)
+# ---------------------------------------------------
+# FIX EMPTY OR MISSING CSV FILES
+# ---------------------------------------------------
+def ensure_csv(file_path, columns):
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        pd.DataFrame(columns=columns).to_csv(file_path, index=False)
 
-if not os.path.exists(ATTENDANCE_FILE):
-    pd.DataFrame(columns=["id", "name", "date", "time", "status"]).to_csv(ATTENDANCE_FILE, index=False)
-
+ensure_csv(EMPLOYEE_FILE, ["id", "name", "image"])
+ensure_csv(ATTENDANCE_FILE, ["id", "name", "date", "time", "status"])
 
 # ---------------------------------------------------
-# LOAD DATA
+# LOAD CSV FILES
 # ---------------------------------------------------
-
 def load_employees():
     return pd.read_csv(EMPLOYEE_FILE)
 
 def load_attendance():
     return pd.read_csv(ATTENDANCE_FILE)
 
-
 # ---------------------------------------------------
 # REGISTER EMPLOYEE
 # ---------------------------------------------------
-
 def register_employee(name, emp_id, image):
     save_path = f"data/employee_images/{emp_id}.jpg"
     image.save(save_path)
@@ -55,14 +55,11 @@ def register_employee(name, emp_id, image):
 
     df.loc[len(df)] = [emp_id, name, save_path]
     df.to_csv(EMPLOYEE_FILE, index=False)
-
     return True, "Employee registered successfully!"
 
-
 # ---------------------------------------------------
-# FACE RECOGNITION USING DEEPFACE
+# FACE RECOGNITION WITH DEEPFACE
 # ---------------------------------------------------
-
 def recognize_face(uploaded_img):
     employees = load_employees()
 
@@ -83,31 +80,29 @@ def recognize_face(uploaded_img):
             if result["verified"]:
                 return row["id"], f"Match found (distance: {result['distance']:.3f})"
 
-        except:
+        except Exception:
             continue
 
     return None, "No match found"
 
-
 # ---------------------------------------------------
 # MARK ATTENDANCE
 # ---------------------------------------------------
-
 def mark_attendance(emp_id):
     employees = load_employees()
     attendance = load_attendance()
-
-    emp = employees[employees["id"] == emp_id]
     today = datetime.now().strftime("%Y-%m-%d")
 
-    if not emp.empty:
-        name = emp.iloc[0]["name"]
-    else:
-        return False, "Employee ID not found!"
+    emp = employees[employees["id"] == emp_id]
 
-    # Check duplicate entry
+    if emp.empty:
+        return False, "Unknown employee!"
+
+    name = emp.iloc[0]["name"]
+
+    # Prevent duplicate entry
     if not attendance[(attendance["id"] == emp_id) & (attendance["date"] == today)].empty:
-        return False, "Attendance already marked today"
+        return False, "Attendance already marked for today"
 
     new_record = {
         "id": emp_id,
@@ -122,21 +117,17 @@ def mark_attendance(emp_id):
 
     return True, f"Attendance marked for {name}"
 
-
 # ---------------------------------------------------
 # STREAMLIT UI
 # ---------------------------------------------------
-
 st.title("📸 Face Recognition Attendance System")
 st.markdown("---")
 
 menu = st.sidebar.radio("Navigation", ["Register Employee", "Mark Attendance", "View Records"])
 
-
 # ---------------------------------------------------
 # PAGE 1: REGISTER EMPLOYEE
 # ---------------------------------------------------
-
 if menu == "Register Employee":
     st.header("Register New Employee")
 
@@ -162,15 +153,13 @@ if menu == "Register Employee":
     st.subheader("Registered Employees")
     st.dataframe(load_employees(), use_container_width=True)
 
-
 # ---------------------------------------------------
 # PAGE 2: MARK ATTENDANCE
 # ---------------------------------------------------
-
 elif menu == "Mark Attendance":
     st.header("Mark Attendance")
 
-    uploaded = st.file_uploader("Upload image for recognition", type=["jpg", "jpeg", "png"])
+    uploaded = st.file_uploader("Upload an image for recognition", type=["jpg", "jpeg", "png"])
 
     if uploaded:
         img = Image.open(uploaded)
@@ -195,11 +184,9 @@ elif menu == "Mark Attendance":
     today = datetime.now().strftime("%Y-%m-%d")
     st.dataframe(df[df["date"] == today], use_container_width=True)
 
-
 # ---------------------------------------------------
-# PAGE 3: VIEW RECORDS
+# PAGE 3: VIEW ALL RECORDS
 # ---------------------------------------------------
-
 elif menu == "View Records":
     st.header("Attendance History")
     df = load_attendance()
@@ -207,4 +194,4 @@ elif menu == "View Records":
     st.dataframe(df, use_container_width=True)
 
     csv = df.to_csv(index=False)
-    st.download_button("📥 Download CSV", csv, "attendance.csv", "text/csv")
+    st.download_button("📥 Download Attendance CSV", csv, "attendance.csv", "text/csv")
