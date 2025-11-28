@@ -1,6 +1,6 @@
 streamlit
 opencv-python-headless
-face-recognition
+deepface
 numpy
 pandas
 Pillow
