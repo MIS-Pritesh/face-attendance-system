@@ -1,8 +1,8 @@
 import streamlit as st
 import os
+from deepface import DeepFace
 from PIL import Image
 import numpy as np
-from deepface import DeepFace
 
 EMPLOYEE_FOLDER = "data/employee_images"
 
@@ -14,62 +14,60 @@ def get_employee_images():
             files.append(os.path.join(EMPLOYEE_FOLDER, f))
     return files
 
-def recognize_face(uploaded_img):
-    """Compare uploaded image with all employee images."""
+def recognize_face(captured_img):
+    """Compare captured image with all employee images."""
     employee_imgs = get_employee_images()
-
     if not employee_imgs:
         return False, "No employee images found!"
 
-    try:
-        # Convert uploaded image to numpy
-        uploaded_np = np.array(uploaded_img.convert("RGB"))
+    # Convert to numpy
+    captured_np = np.array(captured_img.convert("RGB"))
 
-        # Compute embedding of uploaded image
-        uploaded_embed = DeepFace.represent(
-            img_path=uploaded_np,
-            model_name='Facenet',
+    # Extract embedding for captured image
+    captured_embed = DeepFace.represent(
+        img_path=captured_np,
+        model_name="Facenet",
+        enforce_detection=False
+    )[0]["embedding"]
+
+    # Compare with stored employee embeddings
+    for img_path in employee_imgs:
+        emp_img = Image.open(img_path)
+        emp_np = np.array(emp_img.convert("RGB"))
+
+        emp_embed = DeepFace.represent(
+            img_path=emp_np,
+            model_name="Facenet",
             enforce_detection=False
         )[0]["embedding"]
 
-        # Compare with each employee image
-        for emp_path in employee_imgs:
-            emp_img = Image.open(emp_path)
-            emp_np = np.array(emp_img.convert("RGB"))
+        distance = np.linalg.norm(np.array(captured_embed) - np.array(emp_embed))
 
-            emp_embed = DeepFace.represent(
-                img_path=emp_np,
-                model_name='Facenet',
-                enforce_detection=False
-            )[0]["embedding"]
+        if distance < 10:  # threshold
+            return True, f"Face Recognized! (Matched: {os.path.basename(img_path)})"
 
-            distance = np.linalg.norm(
-                np.array(uploaded_embed) - np.array(emp_embed)
-            )
-
-            if distance < 10:   # threshold
-                return True, f"Face Recognized (matched with {os.path.basename(emp_path)})"
-
-        return False, "Face NOT recognized."
-
-    except Exception as e:
-        return False, f"Error processing image: {str(e)}"
+    return False, "Face NOT recognized."
 
 
-# ------------------- STREAMLIT UI --------------------
+# ---------------- STREAMLIT UI --------------------
 
-st.title("🔍 Face Recognition - Employee Verification")
+st.title("📸 Live Face Recognition (Employee Verification)")
 
-uploaded_file = st.file_uploader("Upload face image:", type=["png", "jpg", "jpeg"])
+st.write("👉 Capture your face using the camera below")
 
-if uploaded_file is not None:
-    img = Image.open(uploaded_file)
-    st.image(img, caption="Uploaded Image", width=300)
+# Live camera input
+captured = st.camera_input("")
 
-    if st.button("Check Employee"):
-        status, message = recognize_face(img)
+if captured is not None:
+    # Read captured image
+    image = Image.open(captured)
 
-        if status:
-            st.success(message)
-        else:
-            st.error(message)
+    st.info("🔍 Analyzing... Please wait")
+
+    # Run recognition automatically
+    status, message = recognize_face(image)
+
+    if status:
+        st.success(message)
+    else:
+        st.error(message)
