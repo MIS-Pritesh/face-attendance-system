@@ -14,57 +14,68 @@ def get_employee_images():
             files.append(os.path.join(EMPLOYEE_FOLDER, f))
     return files
 
-def recognize_face(captured_img):
-    """Compare captured image with all employee images."""
+def recognize_face(img):
+    """Compare input image with all employee images."""
     employee_imgs = get_employee_images()
     if not employee_imgs:
-        return False, "No employee images found!"
+        return False, "No employee images found in data/employee_images."
 
-    # Convert to numpy
-    captured_np = np.array(captured_img.convert("RGB"))
-
-    # Extract embedding for captured image
-    captured_embed = DeepFace.represent(
-        img_path=captured_np,
-        model_name="Facenet",
-        enforce_detection=False
-    )[0]["embedding"]
-
-    # Compare with stored employee embeddings
-    for img_path in employee_imgs:
-        emp_img = Image.open(img_path)
-        emp_np = np.array(emp_img.convert("RGB"))
-
-        emp_embed = DeepFace.represent(
-            img_path=emp_np,
-            model_name="Facenet",
+    try:
+        img_np = np.array(img.convert("RGB"))
+        img_embed = DeepFace.represent(
+            img_path=img_np,
+            model_name='Facenet',
             enforce_detection=False
         )[0]["embedding"]
 
-        distance = np.linalg.norm(np.array(captured_embed) - np.array(emp_embed))
+        for emp_path in employee_imgs:
+            emp_img = Image.open(emp_path)
+            emp_np = np.array(emp_img.convert("RGB"))
 
-        if distance < 10:  # threshold
-            return True, f"Face Recognized! (Matched: {os.path.basename(img_path)})"
+            emp_embed = DeepFace.represent(
+                img_path=emp_np,
+                model_name='Facenet',
+                enforce_detection=False
+            )[0]["embedding"]
 
-    return False, "Face NOT recognized."
+            distance = np.linalg.norm(np.array(img_embed) - np.array(emp_embed))
+
+            if distance < 10:  # Threshold
+                return True, f"Face Recognized! (Matched with {os.path.basename(emp_path)})"
+
+        return False, "Face NOT recognized."
+
+    except Exception as e:
+        return False, f"Error analyzing image: {str(e)}"
 
 
 # ---------------- STREAMLIT UI --------------------
 
-st.title("📸 Live Face Recognition (Employee Verification)")
+st.title("🧑‍💼 Employee Face Recognition")
 
-st.write("👉 Capture your face using the camera below")
+# OPTION SELECTOR
+mode = st.radio(
+    "Choose input method:",
+    ("Upload Image", "Capture Live Image")
+)
 
-# Live camera input
-captured = st.camera_input("")
+image = None
 
-if captured is not None:
-    # Read captured image
-    image = Image.open(captured)
+# 1️⃣ UPLOAD IMAGE OPTION
+if mode == "Upload Image":
+    uploaded = st.file_uploader("Upload face image", type=["png", "jpg", "jpeg"])
+    if uploaded is not None:
+        image = Image.open(uploaded)
 
-    st.info("🔍 Analyzing... Please wait")
+# 2️⃣ CAPTURE LIVE IMAGE OPTION
+elif mode == "Capture Live Image":
+    captured = st.camera_input("Capture your face")
+    if captured is not None:
+        image = Image.open(captured)
 
-    # Run recognition automatically
+# When we have an image, process automatically
+if image is not None:
+    st.info("🔍 Processing image... please wait.")
     status, message = recognize_face(image)
 
     if status:
